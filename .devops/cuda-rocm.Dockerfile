@@ -154,7 +154,7 @@ ENTRYPOINT [ "/app/llama-cli" ]
 ### Server, Server only
 FROM base AS server
 
-ENV LLAMA_ARG_HOST=0.0.0.0
+# host is set by the caller (--host / LLAMA_ARG_HOST)
 
 COPY --from=build /app/full/llama /app/full/llama-server /app
 
