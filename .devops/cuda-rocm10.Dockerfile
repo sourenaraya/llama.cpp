@@ -51,7 +51,8 @@ RUN apt-get update && \
     apt-get install -y gcc-${GCC_VERSION} g++-${GCC_VERSION} build-essential cmake python3 python3-pip git libssl-dev libgomp1 ca-certificates curl gnupg && \
     install -d /etc/apt/keyrings && \
     curl -sL https://stable.repo.amd.com/rocm/gpg/packages.gpg | gpg --dearmor > /etc/apt/keyrings/amdrocm.gpg && \
-    printf 'Types: deb\nURIs: https://stable.repo.amd.com/rocm/core/packages/ubuntu$(echo ${UBUNTU_VERSION} | tr -d .)/\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/amdrocm.gpg\nEnabled: yes\n' > /etc/apt/sources.list.d/amdrocm-stable.sources && \
+    APTV=$(echo ${UBUNTU_VERSION} | tr -d .) && \
+    printf 'Types: deb\nURIs: https://stable.repo.amd.com/rocm/core/packages/ubuntu%s/\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/amdrocm.gpg\nEnabled: yes\n' ${APTV} > /etc/apt/sources.list.d/amdrocm-stable.sources && \
     apt-get update && \
     # per-arch runtime + dev metas cover hipblas/rocblas/hipcub/rocprim/comgr/hsa
     apt-get install -y --no-install-recommends $(for a in $(echo ${ROCM_DOCKER_ARCH} | tr ';' ' '); do echo amdrocm-core10.0-$a amdrocm-core-dev10.0-$a; done) && \
@@ -106,7 +107,8 @@ RUN apt-get update \
     && apt-get install -y libgomp1 curl ffmpeg ca-certificates gnupg \
     && install -d /etc/apt/keyrings \
     && curl -sL https://stable.repo.amd.com/rocm/gpg/packages.gpg | gpg --dearmor > /etc/apt/keyrings/amdrocm.gpg \
-    && printf 'Types: deb\nURIs: https://stable.repo.amd.com/rocm/core/packages/ubuntu$(echo ${UBUNTU_VERSION} | tr -d .)/\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/amdrocm.gpg\nEnabled: yes\n' > /etc/apt/sources.list.d/amdrocm-stable.sources \
+    && APTV=$(echo ${UBUNTU_VERSION} | tr -d .) \
+    && printf 'Types: deb\nURIs: https://stable.repo.amd.com/rocm/core/packages/ubuntu%s/\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/amdrocm.gpg\nEnabled: yes\n' ${APTV} > /etc/apt/sources.list.d/amdrocm-stable.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends $(for a in $(echo ${ROCM_DOCKER_ARCH} | tr ';' ' '); do echo amdrocm-core10.0-$a; done) \
     && echo /opt/rocm/lib > /etc/ld.so.conf.d/rocm.conf && ldconfig \
