@@ -40,6 +40,7 @@ RUN LLAMA_BUILD_NUMBER="$APP_VERSION" npm run build
 FROM ${BASE_BUILD_CONTAINER} AS build
 
 ARG GCC_VERSION
+ARG UBUNTU_VERSION
 ARG UBUNTU_CODENAME
 ARG CUDA_DOCKER_ARCH
 ARG ROCM_DOCKER_ARCH
@@ -94,6 +95,7 @@ ARG APP_REVISION=N/A
 ARG IMAGE_URL=https://github.com/ggml-org/llama.cpp
 ARG IMAGE_SOURCE=https://github.com/ggml-org/llama.cpp
 ARG ROCM_DOCKER_ARCH
+ARG UBUNTU_VERSION
 ARG UBUNTU_CODENAME
 LABEL org.opencontainers.image.created=$BUILD_DATE \
       org.opencontainers.image.version=$APP_VERSION \
