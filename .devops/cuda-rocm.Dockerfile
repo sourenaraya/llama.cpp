@@ -54,7 +54,7 @@ RUN apt-get update && \
     printf 'Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600\n' > /etc/apt/preferences.d/rocm-pin-600 && \
     apt-get update && \
     # rocm-dev is only the toolchain, math libs cmake configs come from the -dev packages
-    # hipcub is needed by argsort/sum/mean (PRs #27933/#27936)
+    # hipcub (pulls rocprim) is needed by the CUB argsort/top-k/sum/mean path (PR #26592)
     apt-get install -y --no-install-recommends rocm-dev rocblas-dev hipblas-dev hipcub-dev
 
 ENV CC=gcc-${GCC_VERSION} CXX=g++-${GCC_VERSION} CUDAHOSTCXX=g++-${GCC_VERSION}
