@@ -14,8 +14,8 @@ ARG BUILD_CUDA=ON
 ARG CPU_ALL_VARIANTS=ON
 ARG GGML_NATIVE=OFF
 # override the base images, e.g. plain ubuntu for AMD-only builds
-ARG BASE_BUILD_CONTAINER=docker.io/nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}
-ARG BASE_RUN_CONTAINER=docker.io/nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION}
+ARG BASE_BUILD_CONTAINER=docker.io/nvidia/cuda:12.8.1-devel-ubuntu24.04
+ARG BASE_RUN_CONTAINER=docker.io/nvidia/cuda:12.8.1-runtime-ubuntu24.04
 
 ARG BUILD_DATE=N/A
 ARG APP_VERSION=N/A
@@ -46,6 +46,8 @@ ARG CUDA_DOCKER_ARCH
 ARG ROCM_DOCKER_ARCH
 ARG BUILD_JOBS
 ARG BUILD_CUDA
+ARG CPU_ALL_VARIANTS
+ARG GGML_NATIVE
 
 # ROCm 10 repo (new stable.repo.amd.com layout, replaces repo.radeon.com)
 RUN apt-get update && \
