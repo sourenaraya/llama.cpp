@@ -9,7 +9,8 @@ The branch is recreated from upstream master whenever the fork is synced with up
 - image: llama-cpp-cuda-rocm:inference-next5 (rollback: :mtpfix)
 - Dockerfile: .devops/cuda-rocm10.Dockerfile (ROCm 10 from stable.repo.amd.com, CUDA 12.8.1)
 - models.ini presets: Q8_0 (spec-type=draft-mtp, built-in head), Flash-Next Q3_K_XL
-  (spec-type=draft-mtp, separate draft file mtp-*.gguf), Flash Q4_K_XL (experimental)
+  (spec-type=none since 2026-09-22: measured +25% PP, no TG gain; MTP draft file
+  mtp-*.gguf available but not wired), UD-Q6_K_XL (draft-mtp n-max=2)
 
 ## Cherry-picked PRs (all open upstream as of 2026-09-22)
 
