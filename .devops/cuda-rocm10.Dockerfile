@@ -58,7 +58,7 @@ RUN apt-get update && \
     printf 'Types: deb\nURIs: https://stable.repo.amd.com/rocm/core/packages/ubuntu%s/\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/amdrocm.gpg\nEnabled: yes\n' ${APTV} > /etc/apt/sources.list.d/amdrocm-stable.sources && \
     apt-get update && \
     # per-arch runtime + dev metas cover hipblas/rocblas/hipcub/rocprim/comgr/hsa
-    apt-get install -y --no-install-recommends $(for a in $(echo ${ROCM_DOCKER_ARCH} | tr ';' ' '); do echo amdrocm-core10.0-$a amdrocm-core-dev10.0-$a; done) && \
+    apt-get install -y --no-install-recommends $(for a in $(echo ${ROCM_DOCKER_ARCH} | tr ';' ' '); do echo amdrocm-core10.1-$a amdrocm-core-dev10.1-$a; done) && \
     rm -rf /var/lib/apt/lists/*
 
 ENV CC=gcc-${GCC_VERSION} CXX=g++-${GCC_VERSION} CUDAHOSTCXX=g++-${GCC_VERSION}
@@ -69,7 +69,7 @@ COPY . .
 
 COPY --from=web /app/tools/ui/dist tools/ui/dist
 
-# /opt/rocm is a symlink hub into core-10.0 (headers, libs, cmake configs)
+# /opt/rocm is a symlink hub into core-10.1 (headers, libs, cmake configs)
 RUN HIPCXX=/opt/rocm/llvm/bin/clang HIP_PATH=/opt/rocm ROCM_PATH=/opt/rocm \
     cmake -B build -DGGML_NATIVE=${GGML_NATIVE} -DGGML_CUDA=${BUILD_CUDA} -DGGML_HIP=ON -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=${CPU_ALL_VARIANTS} -DLLAMA_BUILD_TESTS=OFF \
     -DCMAKE_CUDA_ARCHITECTURES=${CUDA_DOCKER_ARCH} -DAMDGPU_TARGETS="${ROCM_DOCKER_ARCH}" \
@@ -114,7 +114,7 @@ RUN apt-get update \
     && APTV=$(echo ${UBUNTU_VERSION} | tr -d .) \
     && printf 'Types: deb\nURIs: https://stable.repo.amd.com/rocm/core/packages/ubuntu%s/\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/amdrocm.gpg\nEnabled: yes\n' ${APTV} > /etc/apt/sources.list.d/amdrocm-stable.sources \
     && apt-get update \
-    && apt-get install -y --no-install-recommends $(for a in $(echo ${ROCM_DOCKER_ARCH} | tr ';' ' '); do echo amdrocm-core10.0-$a; done) \
+    && apt-get install -y --no-install-recommends $(for a in $(echo ${ROCM_DOCKER_ARCH} | tr ';' ' '); do echo amdrocm-core10.1-$a; done) \
     && echo /opt/rocm/lib > /etc/ld.so.conf.d/rocm.conf && ldconfig \
     && groupadd -g 109 render \
     && apt autoremove -y \
