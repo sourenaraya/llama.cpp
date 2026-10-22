@@ -13,6 +13,8 @@ ARG BUILD_CUDA=ON
 # all CPU variants (prod) vs native only (fast local validation)
 ARG CPU_ALL_VARIANTS=ON
 ARG GGML_NATIVE=OFF
+# -march for the host code, e.g. znver3 (dedicated-host images); empty = generic x86-64
+ARG MARCH=
 # override the base images, e.g. plain ubuntu for AMD-only builds
 ARG BASE_BUILD_CONTAINER=docker.io/nvidia/cuda:12.8.1-devel-ubuntu24.04
 ARG BASE_RUN_CONTAINER=docker.io/nvidia/cuda:12.8.1-runtime-ubuntu24.04
@@ -48,6 +50,7 @@ ARG BUILD_JOBS
 ARG BUILD_CUDA
 ARG CPU_ALL_VARIANTS
 ARG GGML_NATIVE
+ARG MARCH
 
 # ROCm 10 repo (new stable.repo.amd.com layout, replaces repo.radeon.com)
 RUN apt-get update && \
@@ -73,6 +76,7 @@ COPY --from=web /app/tools/ui/dist tools/ui/dist
 RUN HIPCXX=/opt/rocm/llvm/bin/clang HIP_PATH=/opt/rocm ROCM_PATH=/opt/rocm \
     cmake -B build -DGGML_NATIVE=${GGML_NATIVE} -DGGML_CUDA=${BUILD_CUDA} -DGGML_HIP=ON -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=${CPU_ALL_VARIANTS} -DLLAMA_BUILD_TESTS=OFF \
     -DCMAKE_CUDA_ARCHITECTURES=${CUDA_DOCKER_ARCH} -DAMDGPU_TARGETS="${ROCM_DOCKER_ARCH}" \
+    ${MARCH:+ -DCMAKE_CXX_FLAGS=-march=${MARCH}} \
     -DCMAKE_EXE_LINKER_FLAGS=-Wl,--allow-shlib-undefined . && \
     cmake --build build --config Release -j${BUILD_JOBS:-$(nproc)}
 
