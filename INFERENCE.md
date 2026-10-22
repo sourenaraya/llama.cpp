@@ -7,6 +7,7 @@ The branch is recreated from upstream master whenever the fork is synced with up
 
 - master base: c7fc50941 (2026-10-22, +51)
 - prod image: llama-cpp-cuda-rocm:inference-next22 (ROCm 10.1, built from this branch with MARCH=znver3; rollback :inference-next21)
+- MARCH=znver3 (Dockerfile build-arg, -march for host code): A/B vs next21 generic - Q8_0 44.6K cold PP 1035.6/1037.0 vs 1041.6/1043.8 t/s, no measurable PP effect (the pegged CPU core is GPU sync/spin, not march-sensitive compute). Kept anyway: zero cost, and MoE models that do not fit in VRAM run real CPU ggml kernels on this core
 - Dockerfile: .devops/cuda-rocm10.Dockerfile (ROCm 10 from stable.repo.amd.com, CUDA 12.8.1)
 - models.ini presets: Q8_0 (spec-type=draft-mtp, built-in head), Flash-Next Q3_K_XL
   (spec-type=draft-mtp with the ggml-org draft mtp-Qwen3.8-Flash-Next-Q4_0.gguf,
