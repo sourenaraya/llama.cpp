@@ -5,8 +5,8 @@ The branch is recreated from upstream master whenever the fork is synced with up
 
 ## Current state
 
-- master base: c7fc50941 (2026-10-22, +51)
-- prod image: llama-cpp-cuda-rocm:inference-next22 (ROCm 10.1, built from this branch with MARCH=znver3; rollback :inference-next21)
+- master base: 8642541b2 (2026-10-28, +28)
+- prod image: llama-cpp-cuda-rocm:inference-next24 (ROCm 10.1, built from this branch with MARCH=znver3; rollback :inference-next23)
 - Dockerfile: .devops/cuda-rocm10.Dockerfile (ROCm 10 from stable.repo.amd.com, CUDA 12.8.1)
 - models.ini presets: Q8_0 (spec-type=draft-mtp, built-in head), Flash-Next Q3_K_XL
   (spec-type=draft-mtp with the ggml-org draft mtp-Qwen3.8-Flash-Next-Q4_0.gguf,
@@ -16,9 +16,9 @@ The branch is recreated from upstream master whenever the fork is synced with up
 
 | PR | what | author | commits here | why |
 |---|---|---|---|---|
-| #25592 | server: fix checkpoint handling for hybrid/recurrent models | krim | (2 commits, re-applied on this base) | correct checkpoint snapshots/eviction for the Qwen3.8 class. On the d8d92973c base the checkpoint-erase zone conflicts with master's #30666 (same bug, simpler fix): merged both - the erase condition is now `pos_max > pos_next OR n_tokens > n_prefix (#30666) OR pos_max >= pos_stale_min (#25592 exact-state)`, so the stricter hybrid/recurrent invalidation stays on top of the upstream one |
-| #30792 | CUDA: native q8_0 KV (and f16 K / q8_0 V) in the flash-attn tile kernel | Aman Gupta | (2 commits, re-applied on this base) | quantized KV read directly in the tile FA kernel without dequantizing to f16 first - our KV cache is q8_0, so the kernel reads it natively (halves KV shared-memory traffic in FA); fattn-tile.cuh + dispatch + test-backend-ops coverage |
-| #30804 | CUDA: chunk graphs to amortize graph launch | Aman Gupta | (2 commits incl. the 2026-10-21 "Apply batched suggestions from code review", re-applied on this base) | split graph capture into chunks so the launch overhead is amortized. Was dropped 2026-10-20 on a PP suspicion; the A/B exonerated it (next18 1043.0 vs next19 1042.5 t/s - the PP drop was the owner's own KV F16->q8_0 switch: 1318 F16 KV vs 1042 q8 KV t/s on the same image/prompt) and it is back |
+| #25592 | server: fix checkpoint handling for hybrid/recurrent models | krim | (2 commits, re-applied on this base) | correct checkpoint snapshots/eviction for the Qwen3.8 class. The checkpoint-erase zone conflicts with master's #30666 (same bug, simpler fix) on every recreation: merged both - the erase condition is now `pos_max > pos_next OR n_tokens > n_prefix (#30666) OR pos_max >= pos_stale_min (#25592 exact-state)`, so the stricter hybrid/recurrent invalidation stays on top of the upstream one |
+| #31234 | CUDA/HIP: support native quantized KV in flash_attn_tile | clarkbox | (3 commits: the PR's 2 + the follow-up "HIP: RDNA dp4a KQ and packed q4_0 K/V in flash_attn_tile" from clarkbox/llama.cpp tile-quant-kv-pr2) | full K/V type matrix (f16/bf16/q4_0..q8_0) read natively in the tile FA kernel on CUDA and HIP, one instance file per type pair + generator script; decode and small batches use the tile kernel, large prefill batches keep the f16 conversion path. The RDNA dp4a commit is for our gfx1030/gfx1100. Author's R9700 numbers: tg x1.02-1.6 (q8_0 KV, context 8K-128K), pp unchanged. On the rig (next23): Q8_0 44.6K cold pp 1058.7/1060.9 vs next22 1035.6/1037.0 t/s (+2.3%; the Flash pp jump 333->457 was the owner disabling MTP, confounded) |
+| #31294 | spec: skip p_min for sampled MTP and DFlash2 drafts | Pranesh Gonegandla | (1 commit) | `--spec-draft-p-min` is a top-probability cutoff that fits greedy drafts; with probabilistic draft sampling the acceptance is 1 - TV(p,q) per position, which the draft's top probability does not predict, so the cutoff dropped tokens the target would accept. Now skipped for sampled draft-mtp/draft-dflash (greedy and temp-0 unchanged). Directly relevant: our Q8_0 preset runs DFlash2 |
 
 
 
@@ -37,6 +37,8 @@ Devops commits (a1fc9b2ed..3eb8d625b): cuda-rocm10.Dockerfile + legacy-builder C
 | #26004 | merged upstream (033df86b6, 2026-10-08): checkpoints across slot save/restore |
 | #30087 | merged upstream (24e41838e, 2026-10-08): GDN columns per warp. The merged version is simpler than the PR head we had cherry-picked: a single gdn_cols_per_warp=4 constant instead of 2 (4 at S_v=128) |
 | #29353 | merged upstream (62df1815b, 2026-10-14): GDN chunked MMA kernel. The author rebased and updated it before merge (head dde6a4d93, ours was 377e111e8); the merged version is in master, our manual mma.cuh swizzle port is obsolete |
+| #30804 | merged upstream (280141e6d, 2026-10-23): chunk graphs. The merged version carries the invalidate_cuda_graphs fix for master's #26771 that we had to patch in 2026-10-22 (bfea0596a) - the patch is obsolete |
+| #30792 | replaced by #31234 (2026-10-27): same feature (native quantized KV in the tile FA kernel), #31234 is the CUDA+HIP generalization with the full K/V type matrix |
 | #29963 (all three versions) | REJECTED three times on this rig: 2026-10-05 (Q8_0 PP8192 1470 -> 823-955 t/s, -35%, Flash -31%), 2026-10-15 rewrite (Q8_0 -45%, Flash -55%), 2026-10-17 rewrite (Q8_0 680.5 vs next19 1042.5 t/s, -35%, Flash 219.7 vs ~370, -41%). In every version the pipeline parallelism never enables for the Flash preset (no "pipeline" log line, gates fail silently on the 3x mixed CUDA+ROCm rig), so only the downside lands: the sched changes (upload-inputs-once-per-device, host-weight offload callback) also cut PP on the dense all-in-VRAM Q8_0. The 10-17 version's new callback view-tensor fix changed nothing. Author's 3x NVIDIA PCIe5 rig shows the opposite (x1.85-1.9). Do not revisit until the author can explain the non-NVIDIA regression and the Flash pipeline gates |
 | #29030 | closed upstream 2026-10-06 without merge, "superseded by #29599" (the mmap-backed lazy load already in master). Dropped from the branch on 2026-10-07 per the owner's call: the Flash preset runs on master's native lazy mode (`on`), the direct-reads perf (+65..121% pp on iGPU testbeds) is lost on this rig until it comes back upstream in some form |
 | #26592 | CUB path (hipCUB sum/mean/topk): caused the Flash HSA fault on ROCm 10 (2026-09-18) |
