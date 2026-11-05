@@ -5,6 +5,14 @@
 
 using namespace ggml_cuda_mma;
 
+// RDNA3 with Q streamed from shared memory: stop the compiler from hoisting the operand loads of later WMMAs above the
+// current one, which raises register pressure until the kernel spills.
+#if defined(RDNA3)
+#define GGML_CUDA_FATTN_MMA_SCHED_FENCE(Q_in_reg) do { if constexpr (!(Q_in_reg)) { __builtin_amdgcn_sched_barrier(0); } } while (0)
+#else
+#define GGML_CUDA_FATTN_MMA_SCHED_FENCE(Q_in_reg) do { } while (0)
+#endif // defined(RDNA3)
+
 // Config options for the MMA kernel.
 // Should not affect results, only speed/register pressure/shared memory use.
 struct fattn_mma_config {
@@ -231,6 +239,14 @@ static constexpr __host__ __device__ fattn_mma_config ggml_cuda_fattn_mma_get_co
     return fattn_mma_config(32, 1, 0, 0, 0, 0, 0, false);
 }
 
+static constexpr __host__ __device__ fattn_mma_config ggml_cuda_fattn_mma_get_config_rdna3(const int DKQ, const int DV, const int ncols) {
+    // RDNA3 WMMA operands are mirrored, so keeping Q in registers for head size 256 spills heavily.
+    // Stream Q from shared memory and use smaller KV/K/V batches to reduce register pressure.
+    GGML_CUDA_FATTN_MMA_CONFIG_CASE(256, 256, 64, 256, 2,  32,  32,  32,  64, 1, false);
+
+    return ggml_cuda_fattn_mma_get_config_rdna(DKQ, DV, ncols);
+}
+
 static __host__ fattn_mma_config ggml_cuda_fattn_mma_get_config(const int DKQ, const int DV, const int ncols, const int cc) {
     if (ampere_mma_available(cc)) {
         return ggml_cuda_fattn_mma_get_config_ampere(DKQ, DV, ncols);
@@ -242,6 +258,9 @@ static __host__ fattn_mma_config ggml_cuda_fattn_mma_get_config(const int DKQ, c
         return ggml_cuda_fattn_mma_get_config_cdna(DKQ, DV, ncols);
     }
     if (amd_wmma_available(cc)) {
+        if (GGML_CUDA_CC_IS_RDNA3(cc)) {
+            return ggml_cuda_fattn_mma_get_config_rdna3(DKQ, DV, ncols);
+        }
         return ggml_cuda_fattn_mma_get_config_rdna(DKQ, DV, ncols);
     }
     GGML_ASSERT(volta_mma_available(cc));
@@ -257,6 +276,8 @@ static constexpr __device__ fattn_mma_config ggml_cuda_fattn_mma_get_config(cons
     return ggml_cuda_fattn_mma_get_config_cdna(DKQ, DV, ncols);
 #elif defined(VOLTA_MMA_AVAILABLE)
     return ggml_cuda_fattn_mma_get_config_volta(DKQ, DV, ncols);
+#elif defined(AMD_WMMA_AVAILABLE) && defined(RDNA3)
+    return ggml_cuda_fattn_mma_get_config_rdna3(DKQ, DV, ncols);
 #elif defined(AMD_WMMA_AVAILABLE)
     return ggml_cuda_fattn_mma_get_config_rdna(DKQ, DV, ncols);
 #else
@@ -710,6 +731,7 @@ static __device__ __forceinline__ void flash_attn_ext_f16_iter(
 #if defined(AMD_WMMA_AVAILABLE) || defined(AMD_MFMA_AVAILABLE)
                         // AMD matrix C is column-major.
                         mma(KQ_C[i_KQ_00/(np*T_A_KQ::I)], K_A, Q_B[0]);
+                        GGML_CUDA_FATTN_MMA_SCHED_FENCE(Q_in_reg);
 #else
                         // swap A and B for CUDA.
                         mma(KQ_C[i_KQ_00/(np*T_A_KQ::I)], Q_B[0], K_A);
@@ -1034,11 +1056,13 @@ static __device__ __forceinline__ void flash_attn_ext_f16_iter(
                 load_ldmatrix_trans_swizzled<stride_tile_V>(A, tile_V, tile_V_offset_i + 2*k0*stride_tile_V + (i_VKQ_0 - i0_start)/2);
                 if constexpr (T_B_KQ::I == 8) {
                     mma(VKQ_C[i_VKQ_0/T_A_VKQ::I], A, B[k00/(np*T_A_VKQ::J)]);
+                    GGML_CUDA_FATTN_MMA_SCHED_FENCE(Q_in_reg);
                 } else {
                     // Wide version of VKQ_C is column-major.
 #if defined(AMD_WMMA_AVAILABLE) || defined(AMD_MFMA_AVAILABLE)
                     // AMD matrix C is column-major.
                     mma(VKQ_C[i_VKQ_0/T_A_VKQ::I], A, B[k00/(np*T_A_VKQ::J)]);
+                    GGML_CUDA_FATTN_MMA_SCHED_FENCE(Q_in_reg);
 #else
                     // swap A and B for CUDA.
                     mma(VKQ_C[i_VKQ_0/T_A_VKQ::I], B[k00/(np*T_A_VKQ::J)], A);
