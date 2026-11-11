@@ -1135,8 +1135,10 @@ void launch_fattn(
 
     // Optional optimization where the mask is scanned to determine whether part of the calculation can be skipped.
     // Only worth the overhead if there is at lease one FATTN_KQ_STRIDE x FATTN_KQ_STRIDE square to be skipped or
-    //     multiple sequences of possibly different lengths, or kv_rows lists that end with padding.
-    const bool scan_mask = !use_sparse && ncols1_eff == ncols1 && mask && n_kv_cols % FATTN_KQ_STRIDE == 0 && (Q->ne[1] >= 1024 || Q->ne[3] > 1 || kv_rows);
+    //     multiple sequences of possibly different lengths.
+    // Not used with kv_rows: the scan reads a tile of columns past the end of the mask, which is exactly sized
+    // to the rows list, and a bad KV_max then drives the main loop past the list as well.
+    const bool scan_mask = !use_sparse && ncols1_eff == ncols1 && mask && n_kv_cols % FATTN_KQ_STRIDE == 0 && !kv_rows && (Q->ne[1] >= 1024 || Q->ne[3] > 1);
     if (scan_mask) {
         const int64_t s31 = mask->nb[1] / sizeof(half2);
         const int64_t s33 = mask->nb[3] / sizeof(half2);
