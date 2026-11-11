@@ -680,10 +680,13 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
         return BEST_FATTN_KERNEL_NONE;
     }
 
-    // only the MMA kernel reads K/V through kv_rows
+    // the MMA kernel reads K/V through kv_rows; on archs without tensor cores (f.ex. RDNA2) the tile kernel does
     if (kv_rows) {
-        return GGML_CUDA_CC_IS_NVIDIA(cc) && turing_mma_available(cc) && mask && Q->ne[0] != 40 && Q->ne[0] != 72 ?
-            BEST_FATTN_KERNEL_MMA_F16 : BEST_FATTN_KERNEL_NONE;
+        if (!mask || Q->ne[0] == 40 || Q->ne[0] == 72) {
+            return BEST_FATTN_KERNEL_NONE;
+        }
+        return ((GGML_CUDA_CC_IS_NVIDIA(cc) && turing_mma_available(cc)) || amd_wmma_available(cc)) ?
+            BEST_FATTN_KERNEL_MMA_F16 : BEST_FATTN_KERNEL_TILE;
     }
 
     // For small batch sizes the vector kernel may be preferable over the kernels optimized for large batch sizes:
