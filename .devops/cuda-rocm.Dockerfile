@@ -70,12 +70,16 @@ COPY --from=web /app/tools/ui/dist tools/ui/dist
 # -march for host code on a dedicated host (empty by default)
 ARG MARCH
 
+# 1: hipCUB wide-rows argsort for backend sampling on ROCm (default: off)
+ARG HIP_ARGSORT_CUB=0
+
 # apt lays ROCm out under /opt/rocm-<ver>, point CMake at it
 # BuildKit cache mount keeps the build tree across runs for incremental compiles
 RUN --mount=type=cache,id=llamacpp-build,target=/app/build \
     HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)" ROCM_PATH="$(hipconfig -R)" \
     cmake -B build -DGGML_NATIVE=OFF -DGGML_CUDA=ON -DGGML_HIP=ON -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DLLAMA_BUILD_TESTS=OFF \
     -DCMAKE_CUDA_ARCHITECTURES=${CUDA_DOCKER_ARCH} -DAMDGPU_TARGETS="${ROCM_DOCKER_ARCH}" ${MARCH:+ -DCMAKE_CXX_FLAGS=-march=${MARCH}} \
+    -DGGML_HIP_USE_HIPCUB=${HIP_ARGSORT_CUB} \
     -DCMAKE_EXE_LINKER_FLAGS=-Wl,--allow-shlib-undefined . && \
     cmake --build build --config Release -j${BUILD_JOBS:-$(nproc)} && \
     mkdir -p /app/lib && \
