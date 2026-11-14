@@ -6,7 +6,16 @@ The branch is recreated from upstream master whenever the fork is synced with up
 ## Current state
 
 - master base: 32bdc3a89 (2026-11-14, +16)
-- prod image: llama-cpp-cuda-rocm:inference-next33 (ROCm 7.2.4, built from this branch with MARCH=znver3; rollback :inference-next32)
+- prod image: llama-cpp-cuda-rocm:inference-next34 (ROCm 7.2.4, built from this branch with MARCH=znver3 + HIP_ARGSORT_CUB=1; rollback :inference-next33)
+- NOTE 11-14: this branch adds the hipCUB wide-rows argsort (from the argsort-hip branch,
+  commit b45e700af, built with HIP_ARGSORT_CUB=1). Wide argsort (e.g. the top-p backend
+  sampler over the full ~151936 vocab) fell back to a CPU sampler on ROCm because the CUB
+  path was excluded for HIP; this enables hipCUB for the argsort path only. On this rig's
+  rocPRIM 4.2.0 (< 4.4.0) GGML_HIPCUB_CAPTURE_SAFE=0, so the capture guard keeps wide
+  MULTI-row sorts (ne[0]>1024 && ne[1]>1) out of graph capture - the top-p sampler graph runs
+  uncaptured (eager) while the model graphs keep CUDA graph capture. Gated by the
+  HIP_ARGSORT_CUB build-arg (default 0/off), so a build without it is unchanged. No memory or
+  quality regression (verified: same VRAM, needle 3/3, completion test correct).
 - NOTE 11-14: the new master (+16) includes the DFlash speculative-decoding refactor
   (#32016, +802 lines in common/speculative.cpp) and #30021 (GCN MMQ configs, a different
   file from #31751). It also merged #31294 (spec p_min warning, squashed as 7874988b4) - so
