@@ -101,6 +101,10 @@ if (GGML_HIP_GRAPHS)
     add_compile_definitions(GGML_HIP_GRAPHS)
 endif()
 
+if (GGML_HIP_USE_HIPCUB)
+    add_compile_definitions(GGML_HIP_USE_HIPCUB)
+endif()
+
 if (GGML_HIP_NO_VMM)
     add_compile_definitions(GGML_HIP_NO_VMM)
 endif()
