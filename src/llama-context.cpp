@@ -865,6 +865,17 @@ void llama_context::sched_reserve() {
     {
         auto * gf = graph_reserve(n_tokens, n_seqs, n_outputs_pp, mctx.get(),
                 model.no_alloc(), model.no_alloc() ? backend_buf_exp_size.data() : nullptr);
+        if (!gf && cparams.pipeline_parallel) {
+            // the previous compute buffers may still be allocated, so the grown
+            // re-reservation fails next to them; release them and retry PP first
+            sched.reset();
+            sched_new({
+                /*.max_nodes  =*/ max_nodes,
+                /*.parallel   =*/ true,
+                /*.op_offload =*/ cparams.op_offload,
+            });
+            gf = graph_reserve(n_tokens, n_seqs, n_outputs_pp, mctx.get());
+        }
         if (!gf) {
             if (cparams.pipeline_parallel) {
                 LLAMA_LOG_WARN("%s: compute buffer allocation failed, retrying without pipeline parallelism\n", __func__);
