@@ -3228,6 +3228,16 @@ static bool ggml_cuda_graph_check_compability(ggml_cgraph * cgraph) {
             }
         }
 
+#if defined(GGML_HIP_USE_HIPCUB) && !GGML_HIPCUB_CAPTURE_SAFE
+        // wide multi-row sorts take the hipCUB segmented sort, not capture-safe on this rocPRIM (single rows use DeviceRadixSort)
+        if (node->op == GGML_OP_ARGSORT && node->src[0]->ne[0] > 1024 && node->src[0]->ne[1] > 1) {
+            use_cuda_graph = false;
+            if (ggml_cuda_graph_debug_enabled()) {
+                GGML_LOG_DEBUG("%s: disabling CUDA graphs due to hipCUB argsort capture safety\n", __func__);
+            }
+        }
+#endif
+
         if (!use_cuda_graph) {
             break;
         }
@@ -6627,7 +6637,7 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
         case GGML_OP_TOP_K:
             return op->src[0]->ne[0] <= INT_MAX;
         case GGML_OP_ARGSORT:
-#ifndef GGML_CUDA_USE_CUB
+#if !defined(GGML_CUDA_USE_CUB) && !defined(GGML_HIP_USE_HIPCUB)
             {
                 // bitonic path: the padded row must fit in shared memory
                 int64_t ncols_pad = 1;

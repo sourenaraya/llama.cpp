@@ -10,6 +10,20 @@
 #include <rccl/rccl.h>
 #endif // GGML_USE_NCCL
 
+#ifdef GGML_HIP_USE_HIPCUB
+// stream-capture aliases used by the CUB argsort path
+#define cudaStreamIsCapturing hipStreamIsCapturing
+#define cudaStreamCaptureStatus hipStreamCaptureStatus
+#define cudaStreamCaptureStatusNone hipStreamCaptureStatusNone
+#include <rocprim/rocprim_version.hpp>
+// hipCUB device sorts are not graph-capture safe before rocPRIM 4.4.0
+#if ROCPRIM_VERSION >= 400400
+#    define GGML_HIPCUB_CAPTURE_SAFE 1
+#else
+#    define GGML_HIPCUB_CAPTURE_SAFE 0
+#endif // ROCPRIM_VERSION >= 400400
+#endif // GGML_HIP_USE_HIPCUB
+
 
 #define CUBLAS_GEMM_DEFAULT HIPBLAS_GEMM_DEFAULT
 #define CUBLAS_GEMM_DEFAULT_TENSOR_OP HIPBLAS_GEMM_DEFAULT
