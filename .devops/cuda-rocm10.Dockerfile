@@ -30,12 +30,16 @@ FROM docker.io/node:$NODE_VERSION AS web
 
 ARG APP_VERSION
 
-WORKDIR /app/tools/ui
+WORKDIR /app/ui/apps/chat
 
-COPY tools/ui/package.json tools/ui/package-lock.json ./
+COPY ui/apps/chat/package.json ui/apps/chat/package-lock.json ./
 RUN npm ci
 
-COPY tools/ui/ ./
+COPY ui/apps/chat/ ./
+# the app compiles Llama UI and Llama Voice from their sources next to it
+COPY ui/lib/ui/package.json /app/ui/lib/ui/package.json
+COPY ui/lib/ui/src/lib/ /app/ui/lib/ui/src/lib/
+COPY ui/lib/voice/src/ /app/ui/lib/voice/src/
 RUN LLAMA_BUILD_NUMBER="$APP_VERSION" npm run build
 
 ### Build image
@@ -51,6 +55,10 @@ ARG BUILD_CUDA
 ARG CPU_ALL_VARIANTS
 ARG GGML_NATIVE
 ARG MARCH
+ARG ROCM_CORE_VERSION=10.1
+
+# 1: hipCUB wide-rows argsort for backend sampling on ROCm (default: off)
+ARG HIP_ARGSORT_CUB=0
 
 # ROCm 10 repo (new stable.repo.amd.com layout, replaces repo.radeon.com)
 RUN apt-get update && \
@@ -61,7 +69,7 @@ RUN apt-get update && \
     printf 'Types: deb\nURIs: https://stable.repo.amd.com/rocm/core/packages/ubuntu%s/\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/amdrocm.gpg\nEnabled: yes\n' ${APTV} > /etc/apt/sources.list.d/amdrocm-stable.sources && \
     apt-get update && \
     # per-arch runtime + dev metas cover hipblas/rocblas/hipcub/rocprim/comgr/hsa
-    apt-get install -y --no-install-recommends $(for a in $(echo ${ROCM_DOCKER_ARCH} | tr ';' ' '); do echo amdrocm-core10.1-$a amdrocm-core-dev10.1-$a; done) && \
+    apt-get install -y --no-install-recommends $(for a in $(echo ${ROCM_DOCKER_ARCH} | tr ';' ' '); do echo amdrocm-core${ROCM_CORE_VERSION}-$a amdrocm-core-dev${ROCM_CORE_VERSION}-$a; done) && \
     rm -rf /var/lib/apt/lists/*
 
 ENV CC=gcc-${GCC_VERSION} CXX=g++-${GCC_VERSION} CUDAHOSTCXX=g++-${GCC_VERSION}
@@ -70,15 +78,16 @@ WORKDIR /app
 
 COPY . .
 
-COPY --from=web /app/tools/ui/dist tools/ui/dist
+COPY --from=web /app/ui/apps/chat/dist ui/apps/chat/dist
 
-# /opt/rocm is a symlink hub into core-10.1 (headers, libs, cmake configs)
+# /opt/rocm is a symlink hub into core-${ROCM_CORE_VERSION} (headers, libs, cmake configs)
 # BuildKit cache mount keeps object files across builds for incremental compiles
 RUN --mount=type=cache,id=llama-build,target=/app/build \
     HIPCXX=/opt/rocm/llvm/bin/clang HIP_PATH=/opt/rocm ROCM_PATH=/opt/rocm \
     cmake -B build -DGGML_NATIVE=${GGML_NATIVE} -DGGML_CUDA=${BUILD_CUDA} -DGGML_HIP=ON -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=${CPU_ALL_VARIANTS} -DLLAMA_BUILD_TESTS=OFF \
     -DCMAKE_CUDA_ARCHITECTURES=${CUDA_DOCKER_ARCH} -DAMDGPU_TARGETS="${ROCM_DOCKER_ARCH}" \
     ${MARCH:+ -DCMAKE_CXX_FLAGS=-march=${MARCH}} \
+    -DGGML_HIP_USE_HIPCUB=${HIP_ARGSORT_CUB} \
     -DCMAKE_EXE_LINKER_FLAGS=-Wl,--allow-shlib-undefined . && \
     cmake --build build --config Release -j${BUILD_JOBS:-$(nproc)} && \
     mkdir -p /app/lib && \
@@ -103,6 +112,7 @@ ARG IMAGE_SOURCE=https://github.com/ggml-org/llama.cpp
 ARG ROCM_DOCKER_ARCH
 ARG UBUNTU_VERSION
 ARG UBUNTU_CODENAME
+ARG ROCM_CORE_VERSION=10.1
 LABEL org.opencontainers.image.created=$BUILD_DATE \
       org.opencontainers.image.version=$APP_VERSION \
       org.opencontainers.image.revision=$APP_REVISION \
@@ -118,7 +128,7 @@ RUN apt-get update \
     && APTV=$(echo ${UBUNTU_VERSION} | tr -d .) \
     && printf 'Types: deb\nURIs: https://stable.repo.amd.com/rocm/core/packages/ubuntu%s/\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/amdrocm.gpg\nEnabled: yes\n' ${APTV} > /etc/apt/sources.list.d/amdrocm-stable.sources \
     && apt-get update \
-    && apt-get install -y --no-install-recommends $(for a in $(echo ${ROCM_DOCKER_ARCH} | tr ';' ' '); do echo amdrocm-core10.1-$a; done) \
+    && apt-get install -y --no-install-recommends $(for a in $(echo ${ROCM_DOCKER_ARCH} | tr ';' ' '); do echo amdrocm-core${ROCM_CORE_VERSION}-$a; done) \
     && echo /opt/rocm/lib > /etc/ld.so.conf.d/rocm.conf && ldconfig \
     && groupadd -g 109 render \
     && apt autoremove -y \
